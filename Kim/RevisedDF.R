@@ -2,7 +2,6 @@ library(tidyverse)
 library(factoextra)
 library(ggplot2)
 library(ggmosaic)
-library(maps)
 library(scales)
 library(biscale)
 library(cowplot)
@@ -43,29 +42,27 @@ df_state %>%
   select(-State) %>% 
   ggpairs()
 
-# Apply logit transformation with small adjustment to avoid 0 or 1
+# Apply logit transformation only to ADD (with small adjustment to avoid 0 or 1)
 df_state <- df_state %>%
   mutate(
-    logit_ADD = logit(ADD, adjust = 0.001),
-    logit_Drug_OD = logit(Drug_OD, adjust = 0.001)
+    logit_ADD = logit(ADD, adjust = 0.001)
   )
 
-# Build models using logit-transformed outcomes
+# Build models
 model_logit_ADD <- lm(logit_ADD ~ Rural + Unemployment + Youth + HousingProblems, data = df_state)
 summary(model_logit_ADD)
 
-model_logit_Drug_OD <- lm(logit_Drug_OD ~ Rural + Unemployment + Youth + HousingProblems, data = df_state)
-summary(model_logit_Drug_OD)
+model_Drug_OD <- lm(Drug_OD ~ Rural + Unemployment + Youth + HousingProblems, data = df_state)
+summary(model_Drug_OD)
 
-# Predict and back-transform to rates using inverse logit
+# Predict values
 df_state <- df_state %>%
   mutate(
-    Pred_logit_ADD = plogis(predict(model_logit_ADD)),
-    Pred_logit_Drug_OD = plogis(predict(model_logit_Drug_OD))
+    Pred_logit_ADD = plogis(predict(model_logit_ADD)),       # Back-transform ADD predictions
+    Pred_Drug_OD = predict(model_Drug_OD)                    # Keep Drug_OD as is
   )
 
-
-# Plot Actual vs. Predicted for Alcohol Death Rate (ADD)
+# Plot Actual vs. Predicted for Alcohol Death Rate (ADD - Logit Model)
 ggplot(df_state, aes(x = Pred_logit_ADD, y = ADD)) +
   geom_point() +
   geom_smooth(method = "lm", se = FALSE, color = "blue") +
@@ -74,32 +71,34 @@ ggplot(df_state, aes(x = Pred_logit_ADD, y = ADD)) +
        y = "Actual Alcohol Death Rate") +
   theme_minimal()
 
-# Plot Actual vs. Predicted for Drug Overdose Death Rate (Drug_OD)
-ggplot(df_state, aes(x = Pred_logit_Drug_OD, y = Drug_OD)) +
+# Plot Actual vs. Predicted for Drug Overdose Deaths (No Logit)
+ggplot(df_state, aes(x = Pred_Drug_OD, y = Drug_OD)) +
   geom_point() +
   geom_smooth(method = "lm", se = FALSE, color = "darkgreen") +
-  labs(title = "Actual vs. Predicted: Drug Overdose Rates (Logit Model)",
-       x = "Predicted Drug Overdose Rate",
-       y = "Actual Drug Overdose Rate") +
+  labs(title = "Actual vs. Predicted: Drug Overdose Deaths",
+       x = "Predicted Drug Overdose Deaths",
+       y = "Actual Drug Overdose Deaths") +
   theme_minimal()
 
 # Tidy models for coefficient plotting
 coefs_logit_ADD <- tidy(model_logit_ADD) %>% mutate(Model = "Alcohol Deaths (Logit)")
-coefs_logit_Drug <- tidy(model_logit_Drug_OD) %>% mutate(Model = "Drug Overdose Deaths (Logit)")
+coefs_Drug <- tidy(model_Drug_OD) %>% mutate(Model = "Drug Overdose Deaths")
 
 # Combine coefficient tables
-coefs_all_logit <- bind_rows(coefs_logit_ADD, coefs_logit_Drug)
+coefs_all <- bind_rows(coefs_logit_ADD, coefs_Drug)
 
-# Plot Coefficient Estimates for Both Models
-ggplot(coefs_all_logit %>% filter(term != "(Intercept)"), 
+# Plot Coefficients for Both Models
+ggplot(coefs_all %>% filter(term != "(Intercept)"), 
        aes(x = estimate, y = reorder(term, estimate), color = Model)) +
   geom_point(position = position_dodge(width = 0.5)) +
   geom_vline(xintercept = 0, linetype = "dashed") +
-  labs(title = "Comparison of Predictors for Alcohol vs. Drug Deaths (Logit Models)",
-       x = "Coefficient Estimate (Logit Scale)",
+  labs(title = "Comparison of Predictors for Alcohol vs. Drug Deaths",
+       x = "Coefficient Estimate",
        y = "Predictor") +
   theme_minimal()
 
-# Residual Plots for Model Diagnostics
+# Residual Plot for ADD (Logit Model)
 plot(model_logit_ADD, which = 1, main = "Residuals vs Fitted: Alcohol Deaths (Logit Model)")
-plot(model_logit_Drug_OD, which = 1, main = "Residuals vs Fitted: Drug Overdose (Logit Model)")
+
+# Residual Plot for Drug OD (Linear Model)
+plot(model_Drug_OD, which = 1, main = "Residuals vs Fitted: Drug Overdose Deaths")
