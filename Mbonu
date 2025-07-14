@@ -1,0 +1,317 @@
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+install.packages("ggmosaic")
+library(ggmosaic)
+library(readr)
+dataset_names <- names(read.csv("analytic_data2025_v2.csv"))
+dataset <- read.csv("analytic_data2025_v2.csv", skip = 1,header = T)
+names(dataset) = dataset_names
+view(dataset)
+installed.packages('missforest')
+
+#changing dots/spaces to underscores
+install.packages('janitor')
+library(janitor)
+dataset_clean <- clean_names(dataset)
+view(dataset_clean)
+
+#removing a duplicate row
+dataset_clean <- dataset[-1, ]
+view(dataset_clean)
+
+ggplot(df, aes(x = 'State.Abbreviation', y = Drug.Overdose.Deaths.raw.value)) +
+  geom_col() +
+  labs(title = "Unemployment and Overdose Rates by Race",
+       x = "Drug overdoses",
+       y = "overdoses",
+       ) +
+  theme_minimal()
+
+state <- dataset_clean |>
+  drop_na() |>
+  group_by(State.Abbreviation) |>
+  summarise(unemployment = mean(as.numeric(Unemployment.raw.value), na.rm = TRUE),
+            deaths = mean(as.numeric(Drug.Overdose.Deaths.raw.value), na.rm = TRUE))
+
+
+
+ggplot(state, aes(x = unemployment, 
+                          y = deaths)) +
+                          geom_point()+
+                          geom_smooth(method = 'lm')
+
+
+
+ggplot(top_states, aes(x = State, y = TotalClaims, fill = SpecialtyCateg)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~ SpecialtyCateg, scales = 'free_y') +
+  theme_minimal() +
+  labs(
+    title = "Top 5 States by Opioid Claims Within Each Specialty",
+    x = "State",
+    y = "Total Opioid Claims"
+  )
+
+
+
+library(tidyr)
+library(dplyr)
+long_df <- dataset_clean %>%
+  pivot_longer()
+
+
+df_long <- pivot_longer(
+  data = df,
+  cols = everything(),         # ← ALL columns
+  names_to = "Variable",
+  values_to = "Value"
+)
+
+
+
+df_long <- df %>%
+  pivot_longer(
+    cols = matches("X\\.\\..*raw\\.value$"),  # more precise
+    names_to = "Race",
+    values_to = "Percent"
+  )
+#pick covariance, substack data to only minesota, do a correlation
+#fill missing na's(f = log(x)/1-6)
+
+
+#picking keywords, grabbing columns with them then subsetting a new dataset
+keywords <- c("state", "name", "death", "overdose", "drug", "mental", "suicide", 
+              "housing", "pollution", "air", "poverty", "unemployment", 
+              "access", "insurance", "healthcare", "mental", "premature", 
+              "AIAN", "Native", "health", "physical", "poor", "college",
+              "age", "drug", "mortality", "care", "ratio", "insured", 
+              "race", "Black", "White", "Hispanic", "Latino", 
+              "Asian", "AIAN", "American.Indian", "Alaska.Native", 
+              "Native", "Pacific", "alcohol")
+
+selected_cols <- colnames(dataset_clean)[
+  str_detect(tolower(colnames(dataset_clean)), str_c(tolower(keywords), collapse = "|"))
+]
+
+filtered_data <- dataset_clean |>
+  select(all_of(selected_cols))
+view(filtered_data)
+#filtering for only minesotta
+plains_data <- filtered_data |>
+  filter(State.Abbreviation %in% c("MN", "SD", "ND", "MT"))
+
+view(mn_data)
+
+#converting all values to numeric
+filtered_data_clean <- filtered_data %>%
+  mutate(across(
+    .cols = everything(),
+    .fns = ~ suppressWarnings(as.numeric(gsub(",", "", .)))
+  ))
+clean_data <- numeric_data %>%
+  drop_na()
+numeric_data_clean <- numeric_data %>%
+  select(where(~ !all(is.na(.)) && sd(., na.rm = TRUE) != 0))
+numeric_data_clean <- filtered_data_clean %>% select(where(is.numeric))
+cor_matrix <- cor(numeric_data_clean, use = "pairwise.complete.obs")
+
+
+#doing a correlation
+numeric_data <- dataset_clean |>
+  select(where(is.numeric))
+sapply(filtered_data, class)
+
+
+numeric_data <- filtered_data |>
+  select(drug_overdose_deaths_raw_value, mental_health_providers_raw_value,
+         unemployment_raw_value)
+
+cor_matrix <-
+  cor(numeric_data, use = "pairwise.complete.obs")
+
+cor_matrix["X..American.Indian.or.Alaska.Native.raw.value", ] |>
+  sort(decreasing = TRUE)
+dim(numeric_data)   
+install.packages("Hmisc")
+library(Hmisc)
+cor_results <- rcorr(as.matrix(numeric_data_clean), type = "pearson")
+
+ggplot(mn_data, aes(x = 'X..American.Indian.or.Alaska.Native.raw.value',
+               y = 'Alcohol.Impaired.Driving.Deaths', 
+               color = 'State.Abbreviation')) +
+  geom_point(alpha = 0.7, size = 3) +
+  labs(title = "AIAN Raw Value vs Alcohol Impaired Driving Deaths by State",
+       x = "AIAN Raw Value",
+       y = "Alcohol Impaired Driving Deaths") +
+  theme_minimal()
+
+library(ggplot2)
+
+ggplot(mn_data, aes(x = State.Abbreviation, 
+                    y = Alcohol.Impaired.Driving.Deaths, 
+                    size = `X..American.Indian.or.Alaska.Native.raw.value`)) +
+  geom_point(alpha = 0.7, color = "blue") +
+  labs(title = "Alcohol Impaired Driving Deaths by State with AIAN Population Size",
+       x = "State",
+       y = "Alcohol Impaired Driving Deaths",
+       size = "AIAN Raw Value") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+view(dataset_clean)
+
+#doing correlations 
+numeric_data <- filtered_data |>
+  select(drug_overdose_deaths_raw_value, mental_health_providers_raw_value,
+         unemployment_raw_value, drug_overdose_deaths_aian, drug_overdose_deaths_black,
+         primary_care_physicians_raw_value, ratio_of_population_to_primary_care_physicians,
+         uninsured_raw_value, severe_housing_problems_raw_value, children_in_poverty_aian)
+
+cor_matrix <-
+  cor(numeric_data, use = "pairwise.complete.obs")
+cor_matrix
+
+model <- lm(drug_overdose_deaths_raw_value ~ premature_death_raw_value + 
+   mental_health_providers_raw_value,
+   data = filtered_data)
+summary(model)
+
+ggplot(top_states, aes(x = State, y = TotalClaims, fill = SpecialtyCateg)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~ SpecialtyCateg, scales = 'free_y') +
+  theme_minimal() +
+  labs(
+    title = "Top 5 States by Opioid Claims Within Each Specialty",
+    x = "State",
+    y = "Total Opioid Claims"
+  )
+
+
+lm(Drug_Deaths ~ Poverty_Rate + Mental_Health_Access, data = my_data)
+
+#trying log function
+logit_data <- dataset_clean |>
+  mutate(across(where(is.numeric), ~ log(.x / (1 - .x))))
+
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+library(ggmosaic)
+installed.packages("maps")
+library(maps)
+library(scales)
+install.packages("biscale")
+library(biscale)
+library(cowplot)
+library(usmap)
+library(GGally)
+library(car)
+library(broom)
+library(dplyr)
+setwd("~/Documents/Rstudios/SURE 2025/SURE2025/Kim")
+df <- read.csv("analytic_data2025_v2.csv")
+df_state <- df %>%
+  filter(County.FIPS.Code == "000" & 
+           State.FIPS.Code != "00" & 
+           Name != "District of Columbia") %>% 
+  select(Name, 
+         X..Rural.raw.value, 
+         Unemployment.raw.value,
+         X..Below.18.Years.of.Age.raw.value, 
+         Severe.Housing.Problems.raw.value,
+         Alcohol.Impaired.Driving.Deaths.raw.value,
+         Drug.Overdose.Deaths.raw.value) %>% 
+  rename(
+    State = Name,
+    Rural = X..Rural.raw.value,
+    Unemployment = Unemployment.raw.value,
+    Youth = X..Below.18.Years.of.Age.raw.value,
+    HousingProblems = Severe.Housing.Problems.raw.value,
+    ADD =  Alcohol.Impaired.Driving.Deaths.raw.value,
+    Drug_OD = Drug.Overdose.Deaths.raw.value
+  ) %>%
+  mutate(across(c(Rural, Unemployment, Youth, HousingProblems, ADD,
+                  Drug_OD), as.numeric),
+         State = as.factor(State))
+view(df_state)
+
+logit_data <- df_state |>
+  mutate(across(where(is.numeric), ~ log(Rural / (1 - Rural))))
+df_state <- df_state %>%
+  mutate(rural_logit = log(rural / (1 - rural)))
+
+#doing a lasso 
+install.packages("glmnet")
+library(glmnet)
+X <- model.matrix(Drug_OD~ Rural + State + Unemployment + Youth + HousingProblems +
+                    ADD, data = df_state)[, -1]
+y <- df_state$Drug_OD
+lasso_model <- glmnet(X, y, alpha = 1)
+plot(lasso_model, xvar = "lambda", label = TRUE)
+#cross validation lasso 
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+plot(cv_lasso)
+
+accurate <- cv_lasso$lambda.min   # Most accurate
+simple <-cv_lasso$lambda.1se #most simple
+acc_model <- glmnet(X, y, alpha = 1, lambda = accurate)
+sim_model <- final_model <- glmnet(X, y, alpha = 1, lambda = simple)
+
+coef(acc_model)
+coeg(sim_model)
+
+#refitting
+dataset_name <- dataset_clean |>
+  select( 
+         X..Rural.raw.value, 
+         Unemployment.raw.value,
+         X..Below.18.Years.of.Age.raw.value, 
+         Severe.Housing.Problems.raw.value,
+         Alcohol.Impaired.Driving.Deaths.raw.value,
+         Drug.Overdose.Deaths.raw.value) %>% 
+  rename(
+    State = Name,
+    Rural = X..Rural.raw.value,
+    Unemployment = Unemployment.raw.value,
+    Youth = X..Below.18.Years.of.Age.raw.value,
+    HousingProblems = Severe.Housing.Problems.raw.value,
+    ADD =  Alcohol.Impaired.Driving.Deaths.raw.value,
+    Drug_OD = Drug.Overdose.Deaths.raw.value
+  )
+dataset_log <- dataset_name |>
+  mutate(
+    logit_ADD = logit(alcohol_impaired_driving_deaths_raw_value, adjust = 0.001),
+  )
+view(dataset_log)
+
+model_logit_ADD <- lm(logit_ADD ~ x_rural_raw_value + unemployment_raw_value +
+                        x_below_18_years_of_age_raw_value + 
+                        severe_housing_problems_raw_value, data = dataset_log)
+summary(model_logit_ADD)
+
+##########################
+#### residual plots
+# Extracting residuals
+pearson_residuals <- residuals(model_logit_ADD, type = "pearson")
+raw_residuals <- residuals(model_logit_ADD, type = "response")
+
+# Extracting fitted values
+fitted_values <- fitted(model_logit_ADD)
+
+# Creating a data frame for ggplot
+residuals_df <- data.frame(
+  fitted = fitted_values,
+  pearson_residuals = pearson_residuals,
+  raw_residuals = raw_residuals
+)
+
+# Pearson residuals plot
+ggplot(residuals_df, aes(x = fitted, y = pearson_residuals)) +
+  geom_point()
+
+qqnorm(residuals_df$pearson_residuals)
+
+#partial residual plot, log, exponential, cubed
