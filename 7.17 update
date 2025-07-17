@@ -1,0 +1,213 @@
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+library(ggmosaic)
+library(readr)
+dataset_names <- names(read.csv("analytic_data2025_v2.csv"))
+dataset <- read.csv("analytic_data2025_v2.csv", skip = 1,header = T)
+
+#changing dots/spaces to underscores
+install.packages('janitor')
+library(janitor)
+dataset_clean <- clean_names(dataset)
+view(dataset_clean)
+
+#removing a duplicate row
+dataset_clean <- dataset[-1, ]
+view(dataset_clean)
+
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+library(ggmosaic)
+library(maps)
+library(scales)
+library(biscale)
+library(cowplot)
+library(usmap)
+library(GGally)
+library(car)
+library(broom)
+library(dplyr)
+setwd("~/Documents/Rstudios/SURE 2025/SURE2025/Kim")
+df <- read.csv("analytic_data2025_v2.csv")
+df_state <- df %>%
+  filter(County.FIPS.Code == "000" & 
+           State.FIPS.Code != "00" & 
+           Name != "District of Columbia") %>% 
+  select(Name, 
+         X..Rural.raw.value, 
+         Unemployment.raw.value,
+         X..Below.18.Years.of.Age.raw.value, 
+         Severe.Housing.Problems.raw.value,
+         Alcohol.Impaired.Driving.Deaths.raw.value,
+         Drug.Overdose.Deaths.raw.value) %>% 
+  rename(
+    State = Name,
+    Rural = X..Rural.raw.value,
+    Unemployment = Unemployment.raw.value,
+    Youth = X..Below.18.Years.of.Age.raw.value,
+    HousingProblems = Severe.Housing.Problems.raw.value,
+    ADD =  Alcohol.Impaired.Driving.Deaths.raw.value,
+    Drug_OD = Drug.Overdose.Deaths.raw.value
+  ) %>%
+  mutate(across(c(Rural, Unemployment, Youth, HousingProblems, ADD,
+                  Drug_OD), as.numeric),
+         State = as.factor(State))
+view(df_state)
+
+logit_data <- df_state |>
+  mutate(across(where(is.numeric), ~ log(Rural / (1 - Rural))))
+df_state <- df_state %>%
+  mutate(rural_logit = log(rural / (1 - rural)))
+
+#doing a lasso 
+install.packages("glmnet")
+library(glmnet)
+X <- model.matrix(Drug_OD~ Rural + State + Unemployment + Youth + HousingProblems +
+                    ADD, data = df_state)[, -1]
+y <- df_state$Drug_OD
+lasso_model <- glmnet(X, y, alpha = 1)
+plot(lasso_model, xvar = "lambda", label = TRUE)
+
+#cross validation lasso 
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+plot(cv_lasso)
+
+accurate <- cv_lasso$lambda.min   # Most accurate
+simple <-cv_lasso$lambda.1se #most simple
+acc_model <- glmnet(X, y, alpha = 1, lambda = accurate)
+sim_model <- final_model <- glmnet(X, y, alpha = 1, lambda = simple)
+
+coef(acc_model)
+coeg(sim_model)
+
+view(dataset_clean)
+dataset_log <- dataset_name |>
+  mutate(
+    logit_ADD = logit(ADD, adjust = 0.001),
+  )
+view(dataset_log)
+
+#multiple linear regression on the 4 predictors
+model_logit_ADD <- lm(logit_ADD ~ Rural + Unemployment +
+                        Youth + HousingProblems, data = df.sub)
+summary(model_logit_ADD)
+
+gan_fit1 <- gam(logit_ADD ~ Rural + Unemployment +
+                 Youth + HousingProblems, family = scat, data = df.sub)
+summary(gan_fit1)
+
+gan_fit2 <- gam(logit_ADD ~ Rural + s(Unemployment) +
+                  s(Youth) + s(HousingProblems), family = scat, data = df.sub)
+summary(gan_fit2)
+
+# Extracting residuals
+pearson_residuals <- residuals(model_logit_ADD, type = "pearson")
+raw_residuals <- residuals(model_logit_ADD, type = "response")
+
+# Extracting fitted values
+fitted_values <- fitted(model_logit_ADD)
+
+# Creating a data frame for ggplot
+residuals_df <- data.frame(
+  fitted = fitted_values,
+  pearson_residuals = pearson_residuals,
+  raw_residuals = raw_residuals
+)
+
+# Pearson residuals plot
+ggplot(residuals_df, aes(x = fitted, y = pearson_residuals)) +
+  geom_point()
+
+par(mfrow = c(1,1))
+qqnorm(residuals_df$pearson_residuals, main = "Q-Q Plot of residuls")
+
+#partial residual plot, log, exponential, cubed
+
+#partial residual plot
+library(car)
+partial_residual <- crPlots(model_logit_ADD)
+summary(model_logit_ADD)
+which(cooks.distance(model_logit_ADD) > 4/nrow(dataset_log))
+# Basic diagnostic plots
+par(mfrow = c(2, 2))
+plot(model_logit_ADD)
+
+#log transformation
+model_log <- lm(logit_ADD ~ Rural + log(Unemployment + 1) +
+                  log(Youth + 1) + log(HousingProblems + 1), data = dataset_log)
+crPlots(model_log)
+summary(model_log)
+
+#squared
+model_poly <- lm(logit_ADD ~ (Rural) + poly(Unemployment, 2) +
+                   poly(Youth, 2) + poly(HousingProblems, 2), 
+                 data = na.omit(dataset_log))
+crPlots(model_poly)
+summary(model_poly)
+
+#checking length
+indices.large.standard.residuals <- which(abs(rstandard(model_logit_ADD)) > 3)
+indices.large.studentized.residuals <- which(abs(rstudent(model_logit_ADD)) > 3)
+length(indices.large.standard.residuals)
+length(indices.large.studentized.residuals)
+all(indices.large.standard.residuals == indices.large.studentized.residualsdistan
+
+## cook distance
+which(cooks.distance(model_logit_ADD) > 4/nrow(dataset_log))
+install.packages('mgcv')
+
+
+# Load package
+library(MASS)
+
+# Fit Huber/robust regression model
+model_huber <- rlm(logit_ADD ~ Rural + Unemployment + Youth + HousingProblems, data = df.sub)
+model_huber
+
+# Summary of huber
+summary(model_huber)
+plot(model_huber)
+
+view(df.sub)
+which(cooks.distance(model_huber) > 4/nrow(dataset_log))
+
+#attempting lasso 
+library(glmnet)
+X <- model.matrix(Alcohol.Impaired.Driving.Deaths.raw.value~ X..Rural.raw.value +
+                  Name + Unemployment.raw.value + X..65.and.Older.raw.value + 
+                    X..Below.18.Years.of.Age.raw.value +
+                    Severe.Housing.Cost.Burden.raw.value +
+                    Poor.Physical.Health.Days.raw.value +
+                    Poor.Mental.Health.Days.raw.value +
+                    Mental.Health.Providers.raw.value + 
+                    Preventable.Hospital.Stays.raw.value +
+                    Uninsured.raw.value +
+                    Income.Inequality.raw.value +
+                    Children.in.Poverty.raw.value +
+                    Child.Care.Cost.Burden.raw.value +
+                    Percentage.of.households.with.overcrowding +
+                    Primary.Care.Physicians.raw.value,
+                    data = dataset_clean)[, -1]
+y <- dataset_clean$Alcohol.Impaired.Driving.Deaths.raw.value
+lasso_model <- glmnet(X, y, alpha = 1)
+plot(lasso_model, xvar = "lambda", label = TRUE)
+
+#log on add
+data_ADD <- dataset_clean |>
+  mutate(logit_ADD = log(Alcohol.Impaired.Driving.Deaths.raw.value / (1 - Alcohol.Impaired.Driving.Deaths.raw.value) + 0.001))
+
+more_variables <- lm(Alcohol.Impaired.Driving.Deaths.raw.value ~ X..Rural.raw.value + Unemployment.raw.value +
+                      Poor.Mental.Health.Days.raw.value + Severe.Housing.Cost.Burden.raw.value,
+                      data = dataset_clean)
+partial_residual <- crPlots(model_logit_ADD)
+summary(more_variables)
+vif(more_variables)
+
+#checking outliers
+indices.large.standard.residuals <- which(abs(rstandard(more_variables)) > 3)
+indices.large.studentized.residuals <- which(abs(rstudent(more_variables)) > 3)
+length(indices.large.standard.residuals)
+length(indices.large.studentized.residuals)
+all(indices.large.standard.residuals == indices.large.studentized.residualsdistan
