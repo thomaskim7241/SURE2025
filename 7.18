@@ -1,0 +1,77 @@
+X <- model.matrix(Alcohol.Impaired.Driving.Deaths.raw.value~ X..Rural.raw.value +
+                  Name + Unemployment.raw.value + X..65.and.Older.raw.value + 
+                    X..Below.18.Years.of.Age.raw.value +
+                    Severe.Housing.Cost.Burden.raw.value +
+                    Poor.Physical.Health.Days.raw.value +
+                    Poor.Mental.Health.Days.raw.value +
+                    Mental.Health.Providers.raw.value + 
+                    Preventable.Hospital.Stays.raw.value +
+                    Uninsured.raw.value +
+                    Income.Inequality.raw.value +
+                    Children.in.Poverty.raw.value +
+                    Child.Care.Cost.Burden.raw.value +
+                    Percentage.of.households.with.overcrowding +
+                    Primary.Care.Physicians.raw.value,
+                    data = dataset_clean)[, -1]
+y <- dataset_clean$Alcohol.Impaired.Driving.Deaths.raw.value
+lasso_model <- glmnet(X, y, alpha = 1)
+plot(lasso_model, xvar = "lambda", label = TRUE)
+
+#log on add
+data_ADD <- dataset_clean |>
+  mutate(logit_ADD = log(Alcohol.Impaired.Driving.Deaths.raw.value / (1 - Alcohol.Impaired.Driving.Deaths.raw.value) + 0.001))
+
+#huber on more variables
+more_variables <- rlm(Alcohol.Impaired.Driving.Deaths.raw.value ~ X..Rural.raw.value + Unemployment.raw.value +
+                      Severe.Housing.Cost.Burden.raw.value + X..65.and.Older.raw.value + X..Female.raw.value +
+                      X..American.Indian.or.Alaska.Native.raw.value + X..Disability..Functional.Limitations.raw.value +
+                      Lack.of.Social.and.Emotional.Support.raw.value + Median.Household.Income.raw.value + High.School.Completion.raw.value + Feelings.of.Loneliness.raw.value + 
+                      Primary.Care.Physicians.raw.value + Mental.Health.Providers.raw.value + X..Non.Hispanic.White.raw.value +
+                      Population.raw.value,
+                      data = data_ADD)
+partial_residual <- crPlots(more_variables)
+summary(more_variables)
+
+vif(more_variables)
+
+#checking outliers
+indices.large.standard.residuals <- which(abs(rstandard(more_variables)) > 3)
+indices.large.studentized.residuals <- which(abs(rstudent(more_variables)) > 3)
+length(indices.large.standard.residuals)
+length(indices.large.studentized.residuals)
+all(indices.large.standard.residuals == indices.large.studentized.residualsdistan
+
+#
+
+
+# View them
+
+
+#huber on more variables
+more_variables <- rlm(Alcohol.Impaired.Driving.Deaths.raw.value ~ X..Rural.raw.value + Unemployment.raw.value +
+                        Severe.Housing.Cost.Burden.raw.value + X..65.and.Older.raw.value + X..Female.raw.value +
+                        X..American.Indian.or.Alaska.Native.raw.value + X..Disability..Functional.Limitations.raw.value +
+                        Median.Household.Income.raw.value + High.School.Completion.raw.value + 
+                        Primary.Care.Physicians.raw.value + Mental.Health.Providers.raw.value + X..Non.Hispanic.White.raw.value +
+                        Population.raw.value,
+                      data = data_ADD)
+partial_residual <- crPlots(more_variables)
+summary(more_variables)
+
+vif(more_variables)
+
+
+#Load required package
+
+install.packages('mice')
+library(mice)
+
+#Perform multiple imputation (default m = 5 datasets)
+
+imputed_data <- mice(data_ADD, method = "pmm", m = 5, seed = 123)
+
+#Checking missing values in more_variables
+
+model_vars <- all.vars(formula(more_variables))
+model_data <- data_ADD[ , model_vars]
+colSums(is.na(model_data)) |> sort(decreasing = TRUE)
