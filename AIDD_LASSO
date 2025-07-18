@@ -1,0 +1,311 @@
+dataset_names <- names(read.csv("analytic_data2025_v2.csv"))
+dataset <- read.csv("analytic_data2025_v2.csv")
+df_clean <- clean_names(dataset)
+df_clean <- dataset[-1, ]
+df_clean[df_clean == ""] <- NA
+sum(is.na(df_clean$Alcohol.Impaired.Driving.Deaths.raw.value))
+sum(!is.na(df_clean$Alcohol.Impaired.Driving.Deaths.raw.value))
+df_filtered1 <- df_clean %>% filter(!is.na(Alcohol.Impaired.Driving.Deaths.raw.value))
+df_selected <- df_filtered1 %>%
+  select(
+    # 🎓 Education & Income
+    High.School.Graduation.raw.value,
+    Some.College.raw.value,
+    Reading.Scores.raw.value,
+    Math.Scores.raw.value,
+    Gender.Pay.Gap.raw.value,
+    Median.Household.Income.raw.value,
+    Living.Wage.raw.value,
+    Income.Inequality.raw.value,
+    School.Funding.Adequacy.raw.value,
+    Children.Eligible.for.Free.or.Reduced.Price.Lunch.raw.value,
+    
+    # 👨‍👩‍👧‍👦 Family & Youth Structure
+    Children.in.Poverty.raw.value,
+    Disconnected.Youth.raw.value,
+    Children.in.Single.Parent.Households.raw.value,
+    X..Below.18.Years.of.Age.raw.value,
+    Teen.Births.raw.value,
+    
+    # 🧍 Demographics & Race Composition
+    X..65.and.Older.raw.value,
+    X..Female.raw.value,
+    X..Non.Hispanic.White.raw.value,
+    X..Non.Hispanic.Black.raw.value,
+    X..Hispanic.raw.value,
+    X..American.Indian.or.Alaska.Native.raw.value,
+    X..Rural.raw.value,
+    Population.raw.value,
+    
+    # 💼 Employment & Insurance
+    Unemployment.raw.value,
+    Uninsured.raw.value,
+    Uninsured.Adults.raw.value,
+    Uninsured.Children.raw.value,
+    Ratio.of.population.to.primary.care.physicians.,
+    Ratio.of.population.to.mental.health.providers.,
+    
+    # 🏠 Housing & Living Conditions
+    Severe.Housing.Problems.raw.value,
+    Severe.Housing.Cost.Burden.raw.value,
+    Homeownership.raw.value,
+    Percentage.of.households.with.high.housing.costs,
+    Percentage.of.households.with.overcrowding,
+    Percentage.of.households.with.lack.of.kitchen.or.plumbing.facilities,
+    
+    # 🚗 Commute & Isolation
+    Driving.Alone.to.Work.raw.value,
+    Long.Commute...Driving.Alone.raw.value,
+    Traffic.Volume.raw.value,
+    Broadband.Access.raw.value,
+    Social.Associations.raw.value,
+    
+    # 📊 Civic Engagement / Social Capital
+    Voter.Turnout.raw.value,
+    Census.Participation.raw.value,
+    Library.Access.raw.value,
+    School.Segregation.raw.value,
+    Residential.Segregation...Black.White.raw.value,
+    
+    # 🎯 Outcome
+    Alcohol.Impaired.Driving.Deaths.raw.value
+  )
+# filter to variables with at least 90% fullness
+df_filtered <- df_selected %>%
+  select(where(~ mean(!is.na(.)) >= 0.90))
+# Check which variables were removed and which stayed (investigate)
+missing_pct <- sapply(df_selected, function(x) mean(is.na(x)))
+dropped_vars <- names(missing_pct[missing_pct > 0.10])
+kept_vars <- names(missing_pct[missing_pct <= 0.10])
+writeLines(dropped_vars, "vars_dropped_due_to_missingness_90pct.txt")
+writeLines(kept_vars, "vars_kept_after_90pct_filter.txt")
+
+df_filtered <- df_filtered %>%
+  mutate(across(everything(), ~ as.numeric(as.character(.))))
+
+####################### mean Lasso
+
+# Step 1: Keep only county-level rows with known state abbreviations
+df_county <- df_clean %>%
+  filter(County.FIPS.Code != "000" & !is.na(State.Abbreviation))
+
+# Step 2: Select relevant predictors and outcome
+df_selected_county <- df_county %>%
+  select(
+    State.Abbreviation,
+    Alcohol.Impaired.Driving.Deaths.raw.value,
+    High.School.Graduation.raw.value,
+    Some.College.raw.value,
+    Reading.Scores.raw.value,
+    Math.Scores.raw.value,
+    Gender.Pay.Gap.raw.value,
+    Median.Household.Income.raw.value,
+    Living.Wage.raw.value,
+    Income.Inequality.raw.value,
+    School.Funding.Adequacy.raw.value,
+    Children.Eligible.for.Free.or.Reduced.Price.Lunch.raw.value,
+    Children.in.Poverty.raw.value,
+    Disconnected.Youth.raw.value,
+    Children.in.Single.Parent.Households.raw.value,
+    X..Below.18.Years.of.Age.raw.value,
+    Teen.Births.raw.value,
+    X..65.and.Older.raw.value,
+    X..Female.raw.value,
+    X..Non.Hispanic.White.raw.value,
+    X..Non.Hispanic.Black.raw.value,
+    X..Hispanic.raw.value,
+    X..American.Indian.or.Alaska.Native.raw.value,
+    X..Rural.raw.value,
+    Population.raw.value,
+    Unemployment.raw.value,
+    Uninsured.raw.value,
+    Uninsured.Adults.raw.value,
+    Uninsured.Children.raw.value,
+    Ratio.of.population.to.primary.care.physicians.,
+    Ratio.of.population.to.mental.health.providers.,
+    Severe.Housing.Problems.raw.value,
+    Severe.Housing.Cost.Burden.raw.value,
+    Homeownership.raw.value,
+    Percentage.of.households.with.high.housing.costs,
+    Percentage.of.households.with.overcrowding,
+    Percentage.of.households.with.lack.of.kitchen.or.plumbing.facilities,
+    Driving.Alone.to.Work.raw.value,
+    Long.Commute...Driving.Alone.raw.value,
+    Traffic.Volume.raw.value,
+    Broadband.Access.raw.value,
+    Social.Associations.raw.value,
+    Voter.Turnout.raw.value,
+    Census.Participation.raw.value,
+    Library.Access.raw.value,
+    School.Segregation.raw.value,
+    Residential.Segregation...Black.White.raw.value
+  )
+
+# Step 3: Filter out variables with too many missing values (keep only >= 90% full)
+df_selected_county <- df_selected_county %>%
+  select(where(~ mean(!is.na(.)) >= 0.90))
+
+# Step 4: Convert numeric columns (excluding outcome and State.Abbreviation)
+df_predictors <- df_selected_county %>%
+  mutate(across(
+    .cols = -c(State.Abbreviation, Alcohol.Impaired.Driving.Deaths.raw.value),
+    .fns = ~ as.numeric(.)
+  ))
+
+# Step 5: Create state-level means for each variable
+state_means <- df_predictors %>%
+  select(-Alcohol.Impaired.Driving.Deaths.raw.value) %>% 
+  group_by(State.Abbreviation) %>%
+  summarize(across(where(is.numeric), ~ mean(., na.rm = TRUE)), .groups = "drop")
+
+# Step 6: Merge state-level means back into the county dataset
+df_joined <- df_predictors %>%
+  left_join(state_means, by = "State.Abbreviation", suffix = c("", "_state_mean"))
+
+# Step 7: Impute missing values using state-level means
+predictor_vars <- setdiff(
+  names(df_selected_county),
+  c("State.Abbreviation", "Alcohol.Impaired.Driving.Deaths.raw.value")
+)
+
+for (var in predictor_vars) {
+  mean_var <- paste0(var, "_state_mean")
+  if (mean_var %in% names(df_joined)) {
+    df_joined[[var]] <- coalesce(df_joined[[var]], df_joined[[mean_var]])
+  }
+}
+
+# Step 8: Remove temporary state mean columns
+df_imputed_mean <- df_joined %>%
+  select(-ends_with("_state_mean"))
+
+# Step 9: Add the outcome variable back in from original filtered dataset
+df_imputed_mean$Alcohol.Impaired.Driving.Deaths.raw.value <- df_selected_county$Alcohol.Impaired.Driving.Deaths.raw.value
+
+# Step 10: Drop rows with missing outcome values
+df_imputed_mean <- df_imputed_mean %>%
+  filter(!is.na(Alcohol.Impaired.Driving.Deaths.raw.value))
+
+# Step 11: Impute any remaining missing predictors using grand mean
+df_imputed_mean <- df_imputed_mean %>%
+  mutate(across(
+    .cols = -Alcohol.Impaired.Driving.Deaths.raw.value,
+    ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)
+  ))
+
+# Step 12: Remove State.Abbreviation before scaling
+df_scaled_mean <- df_imputed_mean %>%
+  select(-State.Abbreviation) %>%
+  mutate(across(
+    .cols = -Alcohol.Impaired.Driving.Deaths.raw.value,
+    .fns = scale
+  ))
+
+
+# Step 13: Create input matrices for LASSO
+X_mean <- model.matrix(Alcohol.Impaired.Driving.Deaths.raw.value ~ ., data = df_scaled_mean)[, -1]
+y_mean <- df_scaled_mean$Alcohol.Impaired.Driving.Deaths.raw.value
+
+# Step 14: Run LASSO
+y_mean <- as.numeric(y_mean)
+set.seed(666)
+cv_lasso_mean <- cv.glmnet(X_mean, y_mean, alpha = 1)
+
+# Step 15: Plot cross-validation performance
+plot(cv_lasso_mean)
+
+# Step 16: Print and save selected coefficients
+lasso_coeffs_mean <- coef(cv_lasso_mean, s = "lambda.min")
+print(lasso_coeffs_mean)
+
+selected_vars <- rownames(lasso_coeffs_mean)[which(lasso_coeffs_mean != 0)]
+writeLines(selected_vars, "lasso_mean_selected_variables.txt")
+
+library(tidyverse)
+library(missForest)
+library(glmnet)
+####################### missforest Lasso
+# Impute missing data
+set.seed(666) 
+imputed_result <- missForest(df_filtered)
+df_imputed <- imputed_result$ximp
+saveRDS(df_imputed, "imputed_dataset.rds")
+df_imputed <- readRDS("imputed_dataset.rds")
+
+# Check out-of-bag imputation error
+print(imputed_result$OOBerror)
+
+# Standardize all predictors except the outcome variable
+df_scaled <- df_imputed %>%
+  mutate(across(
+    .cols = -Alcohol.Impaired.Driving.Deaths.raw.value,
+    .fns = scale
+  ))
+
+# Create input matrices for LASSO
+X <- model.matrix(Alcohol.Impaired.Driving.Deaths.raw.value ~ ., data = df_scaled)[, -1]
+y <- df_scaled$Alcohol.Impaired.Driving.Deaths.raw.value
+
+# Run cross-validated LASSO
+set.seed(666)
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+
+# Plot CV error vs. lambda to assess model fit
+plot(cv_lasso)
+
+# Get coefficient estimates at the optimal lambda
+lasso_coeffs <- coef(cv_lasso, s = "lambda.min")
+print(lasso_coeffs)
+
+# (Optional): Save non-zero coefficient variable names
+selected_vars <- rownames(lasso_coeffs)[which(lasso_coeffs != 0)]
+writeLines(selected_vars, "lasso_selected_variables.txt")
+
+####################### Lasso Comparison
+min(cv_lasso$cvm)        # from missForest model
+min(cv_lasso_mean$cvm)   # from mean-imputed model
+summary(cv_lasso$cvm)
+summary(cv_lasso_mean$cvm) 
+
+
+write.csv(df_imputed_mean, "final_dataset_for_lasso.csv", row.names = FALSE)
+
+
+###################### Mean Lasso Dataset with Dropped Vars
+
+
+Lasso_dataset <- read.csv("final_dataset_for_lasso.csv")
+view(Lasso_dataset)
+df_lasso_clean <- Lasso_dataset %>% 
+  select(Some.College.raw.value,
+         Math.Scores.raw.value,
+         School.Funding.Adequacy.raw.value,
+         Children.Eligible.for.Free.or.Reduced.Price.Lunch.raw.value,
+         Children.in.Poverty.raw.value,
+         X..65.and.Older.raw.value,
+         X..Female.raw.value,
+         X..American.Indian.or.Alaska.Native.raw.value,
+         Population.raw.value,
+         Unemployment.raw.value,
+         Uninsured.raw.value,
+         Uninsured.Adults.raw.value,
+         Ratio.of.population.to.primary.care.physicians.,
+         Ratio.of.population.to.mental.health.providers.,
+         Severe.Housing.Cost.Burden.raw.value,
+         Homeownership.raw.value,
+         Percentage.of.households.with.overcrowding,
+         Percentage.of.households.with.lack.of.kitchen.or.plumbing.facilities,
+         Driving.Alone.to.Work.raw.value,
+         Long.Commute...Driving.Alone.raw.value,
+         Traffic.Volume.raw.value,
+         Broadband.Access.raw.value,
+         Social.Associations.raw.value,
+         Voter.Turnout.raw.value,
+         Census.Participation.raw.value,
+         Library.Access.raw.value,
+         School.Segregation.raw.value,
+         Alcohol.Impaired.Driving.Deaths.raw.value
+  )
+df_lasso_clean$Alcohol.Impaired.Driving.Deaths.raw.value <- as.numeric(as.character(df_lasso_clean$Alcohol.Impaired.Driving.Deaths.raw.value))
+# Sample with your scaled dataset
+ggpairs(df_lasso_clean)
