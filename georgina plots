@@ -1,0 +1,133 @@
+library(tidyverse)
+
+dataset_full <- read.csv("analytic_data2025_v2.csv", header = FALSE)
+dataset_clean <- read.csv("analytic_data2025_v2.csv", skip = 1)
+colnames(dataset_clean) <- dataset_full[1,]
+
+dataset_clean <- dataset_clean |>
+  janitor::clean_names()
+
+data_ADD <- dataset_clean |>
+  mutate(logit_ADD = log((alcohol_impaired_driving_deaths_raw_value + 0.001) / (1 - alcohol_impaired_driving_deaths_raw_value + 0.001)))
+
+#huber model on add
+dataset_clean$poor_mental_health_days_raw_value
+add_huber <- MASS::rlm(
+  logit_ADD ~ percent_rural_raw_value + unemployment_raw_value + severe_housing_cost_burden_raw_value + percent_65_and_older_raw_value +
+    percent_female_raw_value + percent_american_indian_or_alaska_native_raw_value + percent_disability_functional_limitations_raw_value +
+    median_household_income_raw_value + primary_care_physicians_raw_value + 
+    uninsured_children_raw_value + school_funding_adequacy_raw_value + broadband_access_raw_value +
+    library_access_raw_value + poor_mental_health_days_raw_value +
+    mental_health_providers_raw_value + percent_non_hispanic_white_raw_value,
+  data = data_ADD
+)
+
+summary(add_huber)
+library(car)
+partial_residual <- crPlots(add_huber)
+plot(partial_residual)
+vif(more_variables)
+
+#huber on excess drinkning
+dataset_clean$excessive_drinking_raw_value
+data_excess <- dataset_clean |>
+  mutate(logit_excess = log((excessive_drinking_raw_value + 0.001) / (1 - excessive_drinking_raw_value + 0.001)))
+
+excess_huber<- MASS::rlm(
+  logit_excess ~ percent_rural_raw_value + unemployment_raw_value + severe_housing_cost_burden_raw_value + percent_65_and_older_raw_value +
+    percent_female_raw_value + percent_american_indian_or_alaska_native_raw_value + percent_disability_functional_limitations_raw_value +
+    median_household_income_raw_value + high_school_completion_raw_value + primary_care_physicians_raw_value + 
+    uninsured_children_raw_value + school_funding_adequacy_raw_value + broadband_access_raw_value +
+    library_access_raw_value +
+    mental_health_providers_raw_value + percent_non_hispanic_white_raw_value,
+  data = data_excess)
+summary(excess_huber) 
+
+#histogram of top predictors of excessive drinking by absolute t value
+importance_excess <- data.frame(
+  variable = c("percent_female_raw_value",
+               "percent_disability_functional_limitations_raw_value",
+               "percent_non_hispanic_white_raw_value",
+               "uninsured_children_raw_value",
+               "percent_american_indian_or_alaska_native_raw_value"),
+  abs_t = c(12.37, 25.26, 8.89, 9.21, 8.32 )
+)
+importance_excess$label <- gsub("_", " ", importance_excess$variable)
+library(ggplot2)
+
+ggplot(importance_excess, aes(x = reorder(label, abs_t), y = abs_t)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Top 5 Predictors of Excessive Drinking",
+    x = "",
+    y = "Absolute t-value"
+  ) +
+  theme_minimal()
+
+#table of t values for common predictors
+library(tidyverse)
+library(ggplot2)
+library(scales)
+
+df <- tribble(
+  ~Variable,              ~Outcome,              ~Coef,    ~T,
+  "Disability",           "Excessive Drinking",  -2.06,    -25.26,
+  "Disability",           "ADD",                 -1.58,    -3.41,
+  "Disability",           "Drug OD",             .21,       9.33,
+  
+  "AI/AN",                "Excessive Drinking",   0.38,     8.32,
+  "AI/AN",                "ADD",                  1.88,     8.36,
+  "AI/AN",                "Drug OD",              .03,      1.85,
+  
+  "Female",               "Excessive Drinking",  -1.58,   -12.37,
+  "Female",               "ADD",                 -1.27,    -1.89,
+  "Female",               "Drug OD",             .09,       5.49,
+  
+  "Uninsured Children",   "Excessive Drinking",   0.87,     9.21,
+  "Uninsured Children",   "ADD",                 -1.86,    -3.87,
+  "Uninsured Children",   "Drug OD",            -144.62,   -11.49,
+  
+  "MH Providers",         "Excessive Drinking",  -1.07,    -0.78,
+  "MH Providers",         "ADD",                 11.25,     1.56,
+  "MH Providers",         "Drug OD",            .05,        3.67
+)
+
+df <- df |> 
+  mutate(
+    Direction = if_else(Coef > 0, "↑", "↓"),
+    Sig = case_when(
+      abs(T) >= 2 ~ "**",
+      abs(T) >= 1.65 ~ "*",
+      TRUE ~ ""
+    ),
+    Label = paste0(Direction, " (", round(T, 1), ")", Sig)
+  )
+ggplot(df, aes(x = Outcome, y = fct_rev(Variable), fill = abs(T))) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Label), size = 5) +
+  scale_fill_gradient(low = "lightyellow", high = "darkblue", name = "Absolute t-value") +
+  labs(
+    title = "Strength & Direction of Predictor Effects",
+    subtitle = "↑/↓ shows direction, (t) is t-value, * = marginal, ** = significant",
+    x = "Outcome",
+    y = "Predictor"
+  ) +
+  theme_minimal(base_size = 14)
+
+#partial residual plot of native american and partial residuals 
+ggplot(data_excess, aes(
+  x = percent_american_indian_or_alaska_native_raw_value,
+  y = partial_resid,
+  color = unemployment_group
+)) +
+  geom_point(alpha = 0.8, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "%Native American Indian/Alaska Native vs. Excessive Drinking",
+    x = "% American Indian/Alaska Native",
+    y = "Partial Residuals",
+    color = "Unemployment Level"
+  ) +
+  scale_color_manual(values = c("Low" = "green", "Middle" = "orange", "High" = "red")) +
+  theme_minimal()
